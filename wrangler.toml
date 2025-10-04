@@ -18,7 +18,7 @@ main = "worker/index.js"
 
 [site]
 	bucket = "./dist"
-entry-point = "workers"
+
 
 # If you prefer using a Worker script to handle SPA fallbacks or API routes,
 # set `main` to point at your worker entry (e.g. "worker/index.js") and add bindings.
