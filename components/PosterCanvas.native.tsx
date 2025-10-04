@@ -75,7 +75,6 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster 
     if (!fontName || fontName === 'System') return undefined;
     return fontName;
   };
-
   const titleFamily = resolveFamilyNative(posterData.titleFont);
   const artistFamily = resolveFamilyNative(posterData.artistFont);
   const tracksFamily = resolveFamilyNative(posterData.tracksFont);
