@@ -1,6 +1,6 @@
 # Plastered - Album Poster Creator
 
-A React Native mobile app for creating beautiful album posters from album metadata (MusicBrainz) and cover art (Cover Art Archive).
+A React Native mobile app for creating beautiful album posters from album metadata (MusicBrainz) and cover art (Cover Art Archive). This app was heavily inspired by Posterfy.
 
 ## Features
 
