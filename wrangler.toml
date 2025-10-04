@@ -4,7 +4,7 @@
 name = "plastered"
 compatibility_date = "2025-10-03"
 # Your Cloudflare Account ID (replace this)
-account_id = "YOUR_ACCOUNT_ID_HERE"
+account_id = "7cf41e9af3a9ec565ab9de9869235d8a"
 # When developing, this enables preview on workers.dev (set to true to use)
 workers_dev = true
 # If you want to publish to a route, set `route` and `zone_id`.
