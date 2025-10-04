@@ -1,0 +1,71 @@
+# Plastered - Album Poster Creator
+
+A React Native mobile app for creating beautiful album posters from album metadata (MusicBrainz) and cover art (Cover Art Archive).
+
+## Features
+
+-- 🎵 Search for albums via MusicBrainz
+- 🎨 Customizable poster design with colors, fonts, and layouts
+- 📋 Editable tracklist display
+- 💾 Download posters directly to your device
+- 🎨 Advanced color customization
+- 📱 Full mobile support with touch gestures
+
+## Setup
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. No API credentials required
+
+This app uses the MusicBrainz public webservice and the Cover Art Archive. Both are public APIs and don't require API keys for basic reads. Please respect their rate limits and usage policies.
+
+3. Start the development server:
+```bash
+npm run dev
+```
+
+## How to Use
+
+1. **Search for Albums**: Use the search tab to find albums via MusicBrainz
+2. **Select Album**: Tap on an album to open the poster editor
+3. **Customize**:
+   - Adjust text sizes, margins, and spacing
+   - Change colors for background, text, and accents
+   - Edit tracklist or toggle its visibility
+   - Modify release date and runtime information
+4. **Generate**: Tap "Generate" to create the poster
+5. **Download**: Tap "Download" to save or share the poster
+
+## Customization Options
+
+### Information Tab
+- Album and artist names
+- Text sizes (title, artist, tracklist)
+- Margins (top, side, cover, background)
+- Release date and runtime
+- Background and text colors
+- Three accent colors
+- Fade effect toggle
+- Tracklist visibility toggle
+
+### Tracklist Tab
+- Edit individual track entries
+- Multi-column layout support
+
+## Technologies Used
+
+- React Native with Expo
+- Expo Router for navigation
+- @shopify/react-native-skia for canvas rendering
+- expo-file-system & expo-sharing for downloads
+-- MusicBrainz for album metadata and the Cover Art Archive for album covers
+
+## Notes
+
+- This is a mobile-first application
+- Poster generation uses canvas rendering for high quality
+- Colors can be customized using the built-in color picker
+- Download functionality uses native sharing on mobile devices
