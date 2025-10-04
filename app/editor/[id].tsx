@@ -83,11 +83,25 @@ export default function EditorScreen() {
   const [tracksFont, setTracksFont] = useState<string>('System');
   const [saveToastVisible, setSaveToastVisible] = useState(false);
   const saveToastTimerRef = useRef<number | null>(null);
+  const [exportModalVisible, setExportModalVisible] = useState(false);
+  const [exportSize, setExportSize] = useState<{ w: number; h: number } | null>(null);
+  const isDownloadFlowRef = useRef<boolean>(false);
+  const [exportWarningVisible, setExportWarningVisible] = useState(false);
+  const [pendingExportSize, setPendingExportSize] = useState<{ w: number; h: number } | null>(null);
+
+  const MAX_PIXELS = 25_000_000; // safe threshold (approx 25 megapixels)
+  const SAFE_WIDTH = 4100;
   const loadedFromStorageRef = useRef<boolean>(false);
   const suppressAutoGenerateRef = useRef<boolean>(false);
   const restoringFromStorageRef = useRef<boolean>(false);
   const [uncompressedAlbumCover, setUncompressedAlbumCover] = useState<string | null>(null);
   const [useUncompressed, setUseUncompressed] = useState<boolean>(false);
+  const [templateImage, setTemplateImage] = useState<string | null>(null);
+  const [framed, setFramed] = useState<boolean>(false);
+  const [frameWidth, setFrameWidth] = useState<string>('24');
+  const [frameColor, setFrameColor] = useState<string>('#ffffff');
+  const [columnGap, setColumnGap] = useState<string>('40');
+  const [showTrackNumbers, setShowTrackNumbers] = useState<boolean>(true);
 
   // NOTE: we defer loading until after storage helpers are available so
   // we can prefer loading a saved project (by id) over fetching from MusicBrainz.
@@ -184,6 +198,8 @@ export default function EditorScreen() {
   color2,
   color3,
   albumCover,
+  columnGap,
+  showTrackNumbers,
     ];
 
     // clear existing
@@ -199,7 +215,7 @@ export default function EditorScreen() {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [albumName, artistsName, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3, albumCover]);
+  }, [albumName, artistsName, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3, albumCover, columnGap, showTrackNumbers]);
 
   const fetchAlbumData = async () => {
     if (loadedFromStorageRef.current) {
@@ -247,7 +263,17 @@ export default function EditorScreen() {
       const media = albumData.media || [];
       media.forEach((m: any) => {
         (m.tracks || []).forEach((t: any, idx: number) => {
-          tracks.push(`${t.position || idx + 1}. ${t.title}`);
+          // include per-track duration if available (MusicBrainz provides length in ms)
+          const len = parseInt(t.length || t.duration || 0);
+          let dur = '';
+          if (!Number.isNaN(len) && len > 0) {
+            const seconds = Math.floor(len / 1000);
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            dur = hrs > 0 ? ` — ${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}` : ` — ${mins}:${String(secs).padStart(2, '0')}`;
+          }
+          tracks.push(`${t.position || idx + 1}. ${t.title}${dur}`);
         });
       });
       if (tracks.length > 0) setShowTracklist(true);
@@ -302,6 +328,44 @@ export default function EditorScreen() {
     setTimeout(() => {
       setGenerating(false);
     }, 1000);
+  };
+
+  const startExportWithSize = (w: number, h: number) => {
+    setExportModalVisible(false);
+    // safety check to avoid browser OOM for very large canvases
+    const pixels = w * h;
+    if (pixels > MAX_PIXELS) {
+      setPendingExportSize({ w, h });
+      setExportWarningVisible(true);
+      return;
+    }
+    setExportSize({ w, h });
+    isDownloadFlowRef.current = true;
+    // trigger generation which will call onImageReady
+    setGenerating(true);
+  };
+
+  const proceedDownscale = () => {
+    if (!pendingExportSize) return setExportWarningVisible(false);
+    const { w, h } = pendingExportSize;
+    const ratio = h / w;
+    const nw = SAFE_WIDTH;
+    const nh = Math.round(SAFE_WIDTH * ratio);
+    setExportWarningVisible(false);
+    setPendingExportSize(null);
+    setExportSize({ w: nw, h: nh });
+    isDownloadFlowRef.current = true;
+    setGenerating(true);
+  };
+
+  const proceedAnyway = () => {
+    if (!pendingExportSize) return setExportWarningVisible(false);
+    const { w, h } = pendingExportSize;
+    setExportWarningVisible(false);
+    setPendingExportSize(null);
+    setExportSize({ w, h });
+    isDownloadFlowRef.current = true;
+    setGenerating(true);
   };
 
   const handleDownload = async () => {
@@ -392,6 +456,12 @@ export default function EditorScreen() {
       titleFont: pd.titleFont || 'System',
       artistFont: pd.artistFont || 'System',
       tracksFont: pd.tracksFont || 'System',
+      templateImage: pd.templateImage || null,
+      framed: Boolean(pd.framed || false),
+      frameWidth: pd.frameWidth || '24',
+      frameColor: pd.frameColor || '#ffffff',
+      columnGap: pd.columnGap || '40',
+      showTrackNumbers: pd.showTrackNumbers === undefined ? true : Boolean(pd.showTrackNumbers),
     };
 
     // Clear any previous generated preview so the new generation will populate it
@@ -429,6 +499,12 @@ export default function EditorScreen() {
       { label: 'artistFont', setter: setArtistFont, value: expectedSnapshot.artistFont },
       { label: 'tracksFont', setter: setTracksFont, value: expectedSnapshot.tracksFont },
       { label: 'albumCover', setter: setAlbumCover, value: expectedSnapshot.albumCover },
+      { label: 'templateImage', setter: setTemplateImage, value: expectedSnapshot.templateImage },
+      { label: 'framed', setter: setFramed, value: expectedSnapshot.framed },
+      { label: 'frameWidth', setter: setFrameWidth, value: expectedSnapshot.frameWidth },
+      { label: 'frameColor', setter: setFrameColor, value: expectedSnapshot.frameColor },
+  { label: 'columnGap', setter: setColumnGap, value: expectedSnapshot.columnGap },
+  { label: 'showTrackNumbers', setter: setShowTrackNumbers, value: expectedSnapshot.showTrackNumbers },
     ];
 
     restoringFromStorageRef.current = true;
@@ -638,8 +714,8 @@ export default function EditorScreen() {
     }, 1500);
 
     return () => window.clearTimeout(timeout);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [albumName, artistsName, albumCover, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [albumName, artistsName, albumCover, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3, columnGap, showTrackNumbers]);
 
   const openColorPicker = (field: string) => {
     setCurrentColorField(field);
@@ -696,6 +772,12 @@ export default function EditorScreen() {
     tracksFont,
     useUncompressed,
     uncompressedAlbumCover,
+    templateImage,
+    framed,
+    frameWidth,
+    frameColor,
+    columnGap,
+    showTrackNumbers,
   });
 
   const posterData = getPosterDataSnapshot();
@@ -754,9 +836,40 @@ export default function EditorScreen() {
           <View style={styles.previewContainer} ref={posterRef}>
             <PosterCanvas
               posterData={{ ...posterData }}
+              exportSize={exportSize}
               onImageReady={(uri: string) => {
                 setGeneratedImage(uri);
                 setGenerating(false);
+                // if this generate was triggered by download flow, start download/share
+                if (isDownloadFlowRef.current) {
+                  isDownloadFlowRef.current = false;
+                  // web download
+                  if (typeof window !== 'undefined') {
+                    const a = document.createElement('a');
+                    a.href = uri;
+                    a.download = `Plastered-${albumName || 'poster'}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                  } else {
+                    // native: save/share
+                    (async () => {
+                      try {
+                        const fileName = `Plastered-${albumName}.png`;
+                        const fileUri = (FileSystem as any).documentDirectory + fileName;
+                        await FileSystem.writeAsStringAsync(fileUri, uri.replace(/^data:image\/png;base64,/, ''), { encoding: 'base64' as any });
+                        if (await Sharing.isAvailableAsync()) {
+                          await Sharing.shareAsync(fileUri);
+                        } else {
+                          Alert.alert('Saved', 'Poster saved to device');
+                        }
+                      } catch (e) {
+                        console.error('Export save failed', e);
+                        Alert.alert('Error', 'Failed to save poster');
+                      }
+                    })();
+                  }
+                }
               }}
               generatePoster={generating}
               onTitleSizeAdjust={(size: number, initial?: boolean) => setTitleSize(String(size))}
@@ -796,8 +909,7 @@ export default function EditorScreen() {
             <Edit3 size={20} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.iconButton, styles.buttonPrimary]} onPress={() => {
-            if (typeof window !== 'undefined') return handleDownloadWeb();
-            return handleDownload();
+            setExportModalVisible(true);
           }} accessibilityLabel="Download">
             <Download size={20} color="#fff" />
           </TouchableOpacity>
@@ -860,6 +972,29 @@ export default function EditorScreen() {
                       />
                     </View>
                   )}
+                  {typeof window !== 'undefined' && (
+                    <View style={{ marginTop: 10, marginBottom: 8 }}>
+                      <Text style={{ color: '#bbb', marginBottom: 6 }}>Upload Template (web)</Text>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e: any) => {
+                          const f = e.target.files && e.target.files[0];
+                          if (!f) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            try {
+                              const dataUrl = reader.result as string;
+                              setTemplateImage(dataUrl);
+                            } catch (err) {
+                              /* ignore */
+                            }
+                          };
+                          reader.readAsDataURL(f);
+                        }}
+                      />
+                    </View>
+                  )}
                   <NormalInput title="Title Size" value={titleSize} onChange={setTitleSize} />
                   <NormalInput title="Artist Size" value={artistsSize} onChange={setArtistsSize} />
                   <NormalInput title="Tracks Size" value={tracksSize} onChange={setTracksSize} />
@@ -889,6 +1024,14 @@ export default function EditorScreen() {
 
                   <CheckInput title="Fade Effect" value={useFade} onChange={setUseFade} text="Enable fade effect" />
                   <CheckInput title="Show Tracklist" value={showTracklist} onChange={setShowTracklist} text="Display tracklist" />
+
+                  <CheckInput title="Framed Poster" value={framed} onChange={setFramed} text="Draw a decorative frame around the poster" />
+                  {framed && (
+                    <View style={{ marginTop: 8 }}>
+                      <NormalInput title="Frame Width (px)" value={frameWidth} onChange={setFrameWidth} />
+                      <ColorInput title="Frame Color" value={frameColor} onClick={() => { setCurrentColorField('frameColor'); setColorPickerVisible(true); }} />
+                    </View>
+                  )}
 
                   {/* Font selectors for different poster parts (horizontal, previewable) */}
                   <View style={{ marginTop: 8 }}>
@@ -958,6 +1101,12 @@ export default function EditorScreen() {
                     placeholder="Enter tracklist..."
                     placeholderTextColor="#555"
                   />
+                  <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <CheckInput title="Show Track Numbers" value={showTrackNumbers} onChange={setShowTrackNumbers} text="Display leading track numbers (e.g. 1.)" />
+                    <View style={{ flex: 1 }}>
+                      <NormalInput title="Column Gap (px)" value={columnGap} onChange={setColumnGap} />
+                    </View>
+                  </View>
                 </View>
               )}
             </ScrollView>
@@ -968,6 +1117,53 @@ export default function EditorScreen() {
                 <Text style={styles.buttonText}>Apply</Text>
               </TouchableOpacity>
               {/* Download removed from modal - use sticky download button */}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Export size modal */}
+      {exportModalVisible && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxWidth: 420 }]}>
+            <Text style={styles.panelTitle}>Choose export size</Text>
+            <View style={{ marginTop: 12 }}>
+              <TouchableOpacity style={styles.button} onPress={() => startExportWithSize(2870, 4100)}>
+                <Text style={styles.buttonText}>Extra small — 2870 × 4100</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.button} onPress={() => startExportWithSize(4100, 5840)}>
+                <Text style={styles.buttonText}>Small — 4100 × 5840</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.button} onPress={() => startExportWithSize(5840, 8310)}>
+                <Text style={styles.buttonText}>Medium — 5840 × 8310</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.button} onPress={() => startExportWithSize(8310, 11790)}>
+                <Text style={styles.buttonText}>Large — 8310 × 11790</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, { marginTop: 8 }]} onPress={() => setExportModalVisible(false)}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {exportWarningVisible && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxWidth: 480 }]}> 
+            <Text style={styles.panelTitle}>Large export warning</Text>
+            <Text style={{ color: '#ddd', marginTop: 8 }}>The selected export is very large and may cause your browser or device to run out of memory.</Text>
+            <Text style={{ color: '#bbb', marginTop: 8 }}>You can downscale to a safer size (recommended) or attempt the full-size export anyway.</Text>
+            <View style={{ marginTop: 12 }}>
+              <TouchableOpacity style={styles.button} onPress={proceedDownscale}>
+                <Text style={styles.buttonText}>Downscale to safe size ({SAFE_WIDTH}px wide)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, { marginTop: 8 }]} onPress={proceedAnyway}>
+                <Text style={styles.buttonText}>Proceed with selected size</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, { marginTop: 8 }]} onPress={() => { setExportWarningVisible(false); setPendingExportSize(null); }}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>

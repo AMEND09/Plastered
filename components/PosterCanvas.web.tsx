@@ -33,23 +33,34 @@ interface PosterData {
   initialTitleSizeSet?: boolean;
   useUncompressed?: boolean;
   uncompressedAlbumCover?: string;
+  // template and framing
+  templateImage?: string | null;
+  framed?: boolean;
+  frameWidth?: string;
+  frameColor?: string;
+  columnGap?: string;
+  showTrackNumbers?: boolean;
 }
 
 interface PosterCanvasProps {
   posterData: PosterData;
   onImageReady: (uri: string) => void;
   generatePoster: boolean;
+  exportSize?: { w: number; h: number } | null;
 }
 
-export default function PosterCanvas({ posterData, onImageReady, generatePoster, onTitleSizeAdjust }: PosterCanvasProps & any) {
+export default function PosterCanvas({ posterData, onImageReady, generatePoster, exportSize, onTitleSizeAdjust }: PosterCanvasProps & any) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // Keep track of the last created blob URL so we can revoke it reliably
   const lastBlobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const width = 2480;
-    const height = 3508;
+  const baseWidth = 2480;
+  const baseHeight = 3508;
+  const width = (exportSize && typeof exportSize.w === 'number') ? exportSize.w : baseWidth;
+  const height = (exportSize && typeof exportSize.h === 'number') ? exportSize.h : baseHeight;
+  const scale = width / baseWidth;
 
     const hexToRgb = (hex: string) => {
       const bigint = parseInt(hex.replace('#', ''), 16);
@@ -74,11 +85,11 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Normalize and parse numeric fields
-      posterData.marginSide = parseInt(posterData.marginSide) || 0;
-      posterData.marginTop = parseInt(posterData.marginTop) || 0;
-      posterData.marginCover = parseInt(posterData.marginCover) || 0;
-      posterData.marginBackground = parseInt(posterData.marginBackground) || 0;
+  // Normalize and scale numeric fields
+  posterData.marginSide = ((parseInt(posterData.marginSide) || 0) * scale);
+  posterData.marginTop = ((parseInt(posterData.marginTop) || 0) * scale);
+  posterData.marginCover = ((parseInt(posterData.marginCover) || 0) * scale);
+  posterData.marginBackground = ((parseInt(posterData.marginBackground) || 0) * scale);
 
       // helpers
       const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
@@ -101,12 +112,12 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
           const coverSize = width - posterData.marginCover * 2;
           ctx.drawImage(img, posterData.marginCover, posterData.marginCover, coverSize, coverSize);
           if (posterData.useFade) {
-            const verticalFade = ctx.createLinearGradient(0, 0, 0, 3000 - posterData.marginBackground);
+            const verticalFade = ctx.createLinearGradient(0, 0, 0, (3000 * scale) - posterData.marginBackground);
             const rgb = hexToRgb(posterData.backgroundColor || '#000000');
             verticalFade.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
             verticalFade.addColorStop(0.8, posterData.backgroundColor || '#000000');
             ctx.fillStyle = verticalFade as any;
-            ctx.fillRect(0, 0, canvas.width, 2500 - posterData.marginBackground);
+            ctx.fillRect(0, 0, canvas.width, (2500 * scale) - posterData.marginBackground);
           }
         } catch (e) {
           // ignore cover load errors
@@ -116,7 +127,17 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
       // background base
       ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = posterData.backgroundColor || '#000';
-      ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, width, height);
+
+      // draw template image behind other artwork if provided (prefer data URLs)
+      if (posterData.templateImage) {
+        try {
+          const timg = await loadImage(posterData.templateImage);
+          ctx.drawImage(timg, 0, 0, width, height);
+        } catch (e) {
+          /* ignore template load errors */
+        }
+      }
 
       // draw cover (prefer uncompressed if asked)
       let canvasTainted = false;
@@ -137,11 +158,11 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
       }
 
       // draw bottom background panel
-      ctx.fillStyle = posterData.backgroundColor || '#000';
-      ctx.fillRect(0, 2480 - posterData.marginBackground, width, height - 2480 + posterData.marginBackground);
+  ctx.fillStyle = posterData.backgroundColor || '#000';
+  ctx.fillRect(0, (2480 * scale) - posterData.marginBackground, width, height - (2480 * scale) + posterData.marginBackground);
 
       // draw album infos
-      let titleFontSize = posterData.titleSize ? parseInt(posterData.titleSize) : 230;
+  let titleFontSize = (posterData.titleSize ? parseInt(posterData.titleSize) : 230) * scale;
 
       const resolveFamily = (fontName?: string) => {
         if (!fontName || fontName === 'System') {
@@ -177,71 +198,120 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
 
       ctx.fillStyle = posterData.textColor || '#fff';
       // Y positions similar to original
-      const titleY = posterData.showTracklist ? 2500 + posterData.marginTop : 2790 + posterData.marginTop;
-      const artistsY = posterData.showTracklist ? (2500 + posterData.marginTop) + (parseInt(posterData.artistsSize || '110') * 1.3) : (2820 + posterData.marginTop) + parseInt(posterData.artistsSize || '110');
+  const titleY = posterData.showTracklist ? (2500 * scale) + posterData.marginTop : (2790 * scale) + posterData.marginTop;
+  const artistsY = posterData.showTracklist ? ((2500 * scale) + posterData.marginTop) + ((parseInt(posterData.artistsSize || '110') * scale) * 1.3) : ((2820 * scale) + posterData.marginTop) + (parseInt(posterData.artistsSize || '110') * scale);
 
       ctx.fillText(posterData.albumName || '', posterData.marginSide, titleY);
 
-  let artistsFontSize = posterData.artistsSize ? parseInt(posterData.artistsSize) : 110;
+  let artistsFontSize = (posterData.artistsSize ? parseInt(posterData.artistsSize) : 110) * scale;
   ctx.font = `bold ${artistsFontSize}px ${artistFamily}`;
       ctx.fillText(posterData.artistsName || '', posterData.marginSide, artistsY);
 
       // release/runtime
-  ctx.font = `bold 70px ${artistFamily}`;
-      ctx.fillText(posterData.titleRelease || '', posterData.marginSide, 3310);
-      const releaseWidth = ctx.measureText(posterData.titleRelease || '').width;
-      ctx.fillText(posterData.titleRuntime || '', releaseWidth + posterData.marginSide + 100, 3310);
+  ctx.font = `bold ${70 * scale}px ${artistFamily}`;
+  ctx.fillText(posterData.titleRelease || '', posterData.marginSide, 3310 * scale);
+  const releaseWidth = ctx.measureText(posterData.titleRelease || '').width;
+  ctx.fillText(posterData.titleRuntime || '', releaseWidth + posterData.marginSide + (100 * scale), 3310 * scale);
 
   ctx.globalAlpha = 0.7;
-  ctx.font = `bold 60px ${artistFamily}`;
-      ctx.fillText(posterData.runtime || '', releaseWidth + posterData.marginSide + 100, 3390);
-      ctx.fillText(posterData.releaseDate || '', posterData.marginSide, 3390);
-      ctx.globalAlpha = 1;
+  ctx.font = `bold ${60 * scale}px ${artistFamily}`;
+    ctx.fillText(posterData.runtime || '', releaseWidth + posterData.marginSide + (100 * scale), 3390 * scale);
+    ctx.fillText(posterData.releaseDate || '', posterData.marginSide, 3390 * scale);
+    ctx.globalAlpha = 1;
 
       // color bars
-      ctx.fillStyle = posterData.color1 || '#ff0000';
-      ctx.fillRect(2045 - posterData.marginSide, 3368, 145, 30);
-      ctx.fillStyle = posterData.color2 || '#00ff40';
-      ctx.fillRect(2190 - posterData.marginSide, 3368, 145, 30);
-      ctx.fillStyle = posterData.color3 || '#2600ff';
-      ctx.fillRect(2335 - posterData.marginSide, 3368, 145, 30);
+  ctx.fillStyle = posterData.color1 || '#ff0000';
+  ctx.fillRect((2045 * scale) - posterData.marginSide, 3368 * scale, 145 * scale, 30 * scale);
+  ctx.fillStyle = posterData.color2 || '#00ff40';
+  ctx.fillRect((2190 * scale) - posterData.marginSide, 3368 * scale, 145 * scale, 30 * scale);
+  ctx.fillStyle = posterData.color3 || '#2600ff';
+  ctx.fillRect((2335 * scale) - posterData.marginSide, 3368 * scale, 145 * scale, 30 * scale);
 
       // tracklist
       if (posterData.showTracklist && posterData.tracklist) {
         ctx.fillStyle = posterData.textColor || '#fff';
-        let paddingMusic = posterData.marginSide + 10;
-        let maxWidth = 0;
-        let paddingColumn = 0;
-  const fontSize = posterData.tracksSize ? parseInt(posterData.tracksSize) : 50;
+  let paddingMusic = posterData.marginSide + (10 * scale);
+  const fontSize = (posterData.tracksSize ? parseInt(posterData.tracksSize) : 50) * scale;
   ctx.font = `bold ${fontSize}px ${tracksFamily}`;
         const musicSize = fontSize;
 
-        const marginTopVal = parseInt(posterData.marginTop || '0');
+        const marginTopVal = parseInt(posterData.marginTop || '0') * scale;
         const rectY = parseInt(posterData.artistsSize || '110')
-          ? (2500 + marginTopVal) + parseInt(posterData.artistsSize || '110') * 1.3 + 130
-          : (2500 + marginTopVal) + (110 * 1.2) + 130;
-        const rectHeight = 500;
+          ? ((2500 * scale) + marginTopVal) + ((parseInt(posterData.artistsSize || '110') * scale) * 1.3) + (130 * scale)
+          : ((2500 * scale) + marginTopVal) + ((110 * scale) * 1.2) + (130 * scale);
+        const rectHeight = 500 * scale;
         const rectWidth = width - (posterData.marginSide * 2);
         const rectX = parseInt(posterData.marginSide);
-        const maxTextHeight = rectY + rectHeight - 10 - parseInt(posterData.marginTop || '0');
+        const maxTextHeight = rectY + rectHeight - (10 * scale) - (parseInt(posterData.marginTop || '0') * scale);
 
-        let textHeight = rectY;
-
-        (posterData.tracklist || '').split('\n').forEach((track: string) => {
-          if (textHeight + musicSize * 1.3 >= maxTextHeight) {
-            textHeight = rectY;
-            paddingMusic = maxWidth + (musicSize * 2.5) + paddingColumn;
-            if (paddingMusic >= rectX + rectWidth) return;
-            paddingColumn = paddingMusic - (musicSize * 2.5);
-            maxWidth = 0;
+        // Parse tracks into {left,right} where right is duration (mm:ss) if present
+        const showNumbers = posterData.showTrackNumbers !== false;
+        const columnGapVal = parseInt(posterData.columnGap || '40') || 40;
+        const lines = (posterData.tracklist || '').split('\n').map((l: string) => {
+          let line = l.trim();
+          if (!showNumbers) {
+            // strip leading numbered prefix like "1. " or "01. "
+            line = line.replace(/^\s*\d+\.\s*/, '');
           }
-          const textWidth = ctx.measureText(`${track}`).width + posterData.marginSide;
-          if (textWidth > maxWidth) {
-            maxWidth = textWidth;
+          const m = line.match(/\s—\s(\d{1,2}:\d{2}(?::\d{2})?)$/);
+          if (m && m.index !== undefined) {
+            return { left: line.slice(0, m.index).trim(), right: m[1] };
           }
-          ctx.fillText(`${track}`, paddingMusic, textHeight);
-          textHeight += (musicSize * 1.3);
+          return { left: line, right: '' };
         });
+
+        // Build columns: fill until vertical space exhausted, then start new column
+        const columns: Array<{ items: Array<any>; maxLeft: number; maxRight: number }> = [];
+        let currentCol = { items: [] as any[], maxLeft: 0, maxRight: 0 };
+        let yCursor = rectY;
+        for (const item of lines) {
+          const leftW = ctx.measureText(item.left).width;
+          const rightW = item.right ? ctx.measureText(item.right).width : 0;
+          if (yCursor + musicSize * 1.3 >= maxTextHeight) {
+            // push current and start new column
+            if (currentCol.items.length > 0) columns.push(currentCol);
+            currentCol = { items: [], maxLeft: 0, maxRight: 0 };
+            yCursor = rectY;
+          }
+          currentCol.items.push({ ...item, leftW, rightW });
+          if (leftW > currentCol.maxLeft) currentCol.maxLeft = leftW;
+          if (rightW > currentCol.maxRight) currentCol.maxRight = rightW;
+          yCursor += musicSize * 1.3;
+        }
+        if (currentCol.items.length > 0) columns.push(currentCol);
+
+        // Render columns with durations right-aligned per column
+  let xCursor = paddingMusic;
+  const gap = musicSize * 2.5;
+        for (const col of columns) {
+          const colWidth = col.maxLeft + col.maxRight + gap;
+          if (xCursor >= rectX + rectWidth) break;
+          let y = rectY;
+          for (const it of col.items) {
+            // left text
+            ctx.fillText(it.left, xCursor, y);
+            // right text (duration) right-aligned within column
+            if (it.right) {
+              const rightX = xCursor + colWidth - it.rightW;
+              ctx.fillText(it.right, rightX, y);
+            }
+            y += musicSize * 1.3;
+          }
+          xCursor += colWidth + (columnGapVal * scale);
+        }
+      }
+
+      // framed border (draw last so it's above everything)
+      if (posterData.framed) {
+        const fw = (parseInt(posterData.frameWidth || '24') || 24) * scale;
+        const fc = posterData.frameColor || '#ffffff';
+        ctx.save();
+        // draw outer frame as stroke inset by half the width so stroke fully visible
+        ctx.lineWidth = fw;
+        ctx.strokeStyle = fc;
+        // draw stroke around full canvas
+        ctx.strokeRect(fw / 2, fw / 2, width - fw, height - fw);
+        ctx.restore();
       }
 
       // finished - export image

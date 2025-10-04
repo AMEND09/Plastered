@@ -33,21 +33,34 @@ interface PosterData {
   initialTitleSizeSet?: boolean;
   useUncompressed?: boolean;
   uncompressedAlbumCover?: string;
+  // template and framing
+  templateImage?: string | null;
+  framed?: boolean;
+  frameWidth?: string;
+  frameColor?: string;
+  columnGap?: string;
+  showTrackNumbers?: boolean;
 }
 
 interface PosterCanvasProps {
   posterData: PosterData;
   onImageReady: (uri: string) => void;
   generatePoster: boolean;
+  exportSize?: { w: number; h: number } | null;
 }
 
-export default function PosterCanvas({ posterData, onImageReady, generatePoster }: PosterCanvasProps) {
+export default function PosterCanvas({ posterData, onImageReady, generatePoster, exportSize }: PosterCanvasProps) {
   const coverImage = useImage(posterData.albumCover);
   const canvasRef = useRef<any>(null);
 
-  const width = 496;
-  const height = 702;
-  const scale = 5;
+  // If exportSize provided, compute a scale factor to scale all layout values
+  const baseWidth = 496;
+  const baseHeight = 702;
+  const targetW = exportSize && exportSize.w ? exportSize.w : baseWidth * 5;
+  const targetH = exportSize && exportSize.h ? exportSize.h : baseHeight * 5;
+  const scale = targetW / baseWidth;
+  const width = targetW;
+  const height = targetH;
 
   useEffect(() => {
     if (generatePoster && coverImage) {
@@ -64,11 +77,11 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster 
     }
   }, [generatePoster, coverImage, posterData]);
 
-  const marginSide = parseInt(posterData.marginSide) / scale || 32;
-  const marginTop = parseInt(posterData.marginTop) /scale || 0;
-  const marginCover = parseInt(posterData.marginCover) / scale || 0;
-  const titleSize = parseInt(posterData.titleSize) / scale || 40;
-  const artistsSize = parseInt(posterData.artistsSize) / scale || 22;
+  const marginSide = (parseInt(posterData.marginSide) || 0) * scale;
+  const marginTop = (parseInt(posterData.marginTop) || 0) * scale;
+  const marginCover = (parseInt(posterData.marginCover) || 0) * scale;
+  const titleSize = (parseInt(posterData.titleSize) || 40) * scale;
+  const artistsSize = (parseInt(posterData.artistsSize) || 22) * scale;
 
   const resolveFamilyNative = (fontName?: string, custom?: string) => {
     if (custom) return custom;
@@ -79,13 +92,38 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster 
   const artistFamily = resolveFamilyNative(posterData.artistFont);
   const tracksFamily = resolveFamilyNative(posterData.tracksFont);
 
-  const titleY = posterData.showTracklist ? 500 + marginTop : 558 + marginTop;
+  const titleY = posterData.showTracklist ? (500 * scale) + marginTop : (558 * scale) + marginTop;
   const artistY = titleY + artistsSize * 1.3;
 
   return (
     <View style={styles.container}>
       <Canvas style={{ width, height }} ref={canvasRef}>
-        <Rect x={0} y={0} width={width} height={height} color={posterData.backgroundColor} />
+  <Rect x={0} y={0} width={width} height={height} color={posterData.backgroundColor} />
+
+        {/* template image (draw first so it's behind everything) */}
+        {posterData.templateImage && (
+          // use Skia Image from data URI when possible
+          (() => {
+            try {
+              const img = useImage(posterData.templateImage as any);
+              if (img) {
+                return (
+                  <SkImage
+                    image={img}
+                    x={0}
+                    y={0}
+                    width={width}
+                    height={height}
+                    fit="cover"
+                  />
+                );
+              }
+            } catch (e) {
+              /* ignore */
+            }
+            return null;
+          })()
+        )}
 
         {coverImage && (
           <SkImage
@@ -99,16 +137,16 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster 
         )}
 
         {posterData.useFade && (
-          <Rect x={0} y={0} width={width} height={500}>
+          <Rect x={0} y={0} width={width} height={500 * scale}>
             <LinearGradient
-              start={vec(0, 250)}
-              end={vec(0, 400)}
+              start={vec(0, 250 * scale)}
+              end={vec(0, 400 * scale)}
               colors={[ 'transparent', posterData.backgroundColor ]}
             />
           </Rect>
         )}
 
-        <Rect x={0} y={496} width={width} height={height - 496} color={posterData.backgroundColor} />
+  <Rect x={0} y={496 * scale} width={width} height={height - (496 * scale)} color={posterData.backgroundColor} />
 
         {/* Text from react-native-skia has differing TS types in some environments; cast to any */}
         {(Text as any)({
@@ -133,27 +171,119 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster 
 
         {(Text as any)({
           x: marginSide,
-          y: 662,
+          y: 662 * scale,
           text: posterData.titleRelease,
           color: posterData.textColor,
-          size: 14,
+          size: 14 * scale,
           familyName: artistFamily,
           weight: 'bold',
         })}
 
         {(Text as any)({
           x: marginSide,
-          y: 678,
+          y: 678 * scale,
           text: posterData.releaseDate,
           color: posterData.textColor,
-          size: 12,
+          size: 12 * scale,
           familyName: artistFamily,
           opacity: 0.7,
         })}
 
-        <Rect x={409 - marginSide} y={674} width={29} height={6} color={posterData.color1} />
-        <Rect x={438 - marginSide} y={674} width={29} height={6} color={posterData.color2} />
-        <Rect x={467 - marginSide} y={674} width={29} height={6} color={posterData.color3} />
+  <Rect x={(409 * scale) - marginSide} y={674 * scale} width={29 * scale} height={6 * scale} color={posterData.color1} />
+  <Rect x={(438 * scale) - marginSide} y={674 * scale} width={29 * scale} height={6 * scale} color={posterData.color2} />
+  <Rect x={(467 * scale) - marginSide} y={674 * scale} width={29 * scale} height={6 * scale} color={posterData.color3} />
+
+        {/* Tracklist rendering with vertically aligned durations */}
+        {posterData.showTracklist && posterData.tracklist && (() => {
+          try {
+            const showNumbers = posterData.showTrackNumbers !== false;
+            const columnGapVal = parseInt(posterData.columnGap || '40') / scale || 8;
+            const lines = (posterData.tracklist || '').split('\n').map((l: string) => {
+              let line = l.trim();
+              if (!showNumbers) {
+                line = line.replace(/^\s*\d+\.\s*/, '');
+              }
+              const m = line.match(/\s—\s(\d{1,2}:\d{2}(?::\d{2})?)$/);
+              if (m && m.index !== undefined) {
+                return { left: line.slice(0, m.index).trim(), right: m[1] };
+              }
+              return { left: line, right: '' };
+            });
+
+            const fontSize = (parseInt(posterData.tracksSize || '50') || 10) * scale;
+            const musicSize = fontSize;
+            const marginTopVal = (parseInt(posterData.marginTop || '0') || 0) * scale;
+            const rectY = parseInt(posterData.artistsSize || '110')
+              ? ((2500 * scale) + marginTopVal) + ((parseInt(posterData.artistsSize || '110') * scale) * 1.3) + (130 * scale)
+              : ((2500 * scale) + marginTopVal) + ((110 * scale) * 1.2) + (130 * scale);
+            const rectHeight = 500 * scale;
+            const rectWidth = width - ((parseInt(posterData.marginSide || '160') * scale) * 2);
+            const rectX = (parseInt(posterData.marginSide) || 0) * scale;
+            const maxTextHeight = rectY + rectHeight - (10 * scale) - (parseInt(posterData.marginTop || '0') * scale);
+
+            // approximate text width by char count * approx char width
+            const approxWidth = (s: string) => (s ? s.length * (fontSize * 0.55) : 0);
+
+            const columns: Array<{ items: Array<any>; maxLeft: number; maxRight: number }> = [];
+            let currentCol = { items: [] as any[], maxLeft: 0, maxRight: 0 };
+            let yCursor = rectY;
+            for (const item of lines) {
+              const leftW = approxWidth(item.left);
+              const rightW = approxWidth(item.right || '');
+              if (yCursor + musicSize * 1.3 >= maxTextHeight) {
+                if (currentCol.items.length > 0) columns.push(currentCol);
+                currentCol = { items: [], maxLeft: 0, maxRight: 0 };
+                yCursor = rectY;
+              }
+              currentCol.items.push({ ...item, leftW, rightW });
+              if (leftW > currentCol.maxLeft) currentCol.maxLeft = leftW;
+              if (rightW > currentCol.maxRight) currentCol.maxRight = rightW;
+              yCursor += musicSize * 1.3;
+            }
+            if (currentCol.items.length > 0) columns.push(currentCol);
+
+            // Render columns
+            let xCursor = rectX + (10 * scale);
+            const gap = musicSize * 2.5;
+            const rendered: any[] = [];
+            for (const col of columns) {
+              const colWidth = col.maxLeft + col.maxRight + gap;
+              if (xCursor >= rectX + rectWidth) break;
+              let y = rectY;
+              for (const it of col.items) {
+                // left text
+                rendered.push((Text as any)({ x: xCursor, y, text: it.left, color: posterData.textColor, size: fontSize, familyName: tracksFamily, weight: 'bold' }));
+                // right text
+                if (it.right) {
+                  const rightX = xCursor + colWidth - it.rightW;
+                  rendered.push((Text as any)({ x: rightX, y, text: it.right, color: posterData.textColor, size: fontSize, familyName: tracksFamily, weight: 'bold' }));
+                }
+                y += musicSize * 1.3;
+              }
+              xCursor += colWidth + (columnGapVal * scale);
+            }
+            return rendered;
+          } catch (e) {
+            return null;
+          }
+        })()}
+
+        {/* Frame drawing: draw stroke by drawing outer rect and inner inset rect with background to simulate stroke if needed */}
+        {posterData.framed && (() => {
+          try {
+            const fw = (parseInt(posterData.frameWidth || '24') || 4) * scale;
+            const fc = posterData.frameColor || '#ffffff';
+            // draw outer filled rect as frame color
+            return (
+              <>
+                <Rect x={0} y={0} width={width} height={height} color={fc} />
+                <Rect x={fw} y={fw} width={width - fw * 2} height={height - fw * 2} color={posterData.backgroundColor} />
+              </>
+            );
+          } catch (e) {
+            return null;
+          }
+        })()}
       </Canvas>
     </View>
   );
