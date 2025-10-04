@@ -17,7 +17,7 @@ workers_dev = true
 main = "worker/index.js"
 
 [site]
-bucket = "./web-build"
+	bucket = "./dist"
 entry-point = "workers"
 
 # If you prefer using a Worker script to handle SPA fallbacks or API routes,
