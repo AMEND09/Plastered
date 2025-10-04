@@ -1,0 +1,24 @@
+# Cloudflare Workers / Workers Sites config for Plastered
+# Fill in `account_id` (required) and optionally `zone_id` / `route` for custom domains.
+# Worker config
+name = "plastered"
+compatibility_date = "2025-10-03"
+# Your Cloudflare Account ID (replace this)
+account_id = "YOUR_ACCOUNT_ID_HERE"
+# When developing, this enables preview on workers.dev (set to true to use)
+workers_dev = true
+# If you want to publish to a route, set `route` and `zone_id`.
+# route = "example.com/*"
+# zone_id = "YOUR_ZONE_ID"
+
+# Serve the static site build output directory. Adjust this if your web export
+# produces a different folder (expo export default is `web-build` or `dist` depending on your setup).
+
+main = "worker/index.js"
+
+# If you prefer using a Worker script to handle SPA fallbacks or API routes,
+# set `main` to point at your worker entry (e.g. "worker/index.js") and add bindings.
+# main = "worker/index.js"
+
+# NOTE: Replace account_id and optionally zone_id / route before publishing.
+# Publish with `wrangler publish` (see cloudflare.md for a quick guide).
