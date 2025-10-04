@@ -40,6 +40,7 @@ interface PosterData {
   frameColor?: string;
   columnGap?: string;
   showTrackNumbers?: boolean;
+  showTrackLengths?: boolean;
 }
 
 interface PosterCanvasProps {
@@ -197,6 +198,7 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
         {posterData.showTracklist && posterData.tracklist && (() => {
           try {
             const showNumbers = posterData.showTrackNumbers !== false;
+            const showLengths = posterData.showTrackLengths !== false;
             const columnGapVal = parseInt(posterData.columnGap || '40') / scale || 8;
             const lines = (posterData.tracklist || '').split('\n').map((l: string) => {
               let line = l.trim();
@@ -205,7 +207,7 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
               }
               const m = line.match(/\s—\s(\d{1,2}:\d{2}(?::\d{2})?)$/);
               if (m && m.index !== undefined) {
-                return { left: line.slice(0, m.index).trim(), right: m[1] };
+                return { left: line.slice(0, m.index).trim(), right: showLengths ? m[1] : '' };
               }
               return { left: line, right: '' };
             });

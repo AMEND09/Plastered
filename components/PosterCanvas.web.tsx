@@ -246,6 +246,7 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
 
         // Parse tracks into {left,right} where right is duration (mm:ss) if present
         const showNumbers = posterData.showTrackNumbers !== false;
+        const showLengths = posterData.showTrackLengths !== false;
         const columnGapVal = parseInt(posterData.columnGap || '40') || 40;
         const lines = (posterData.tracklist || '').split('\n').map((l: string) => {
           let line = l.trim();
@@ -255,7 +256,7 @@ export default function PosterCanvas({ posterData, onImageReady, generatePoster,
           }
           const m = line.match(/\s—\s(\d{1,2}:\d{2}(?::\d{2})?)$/);
           if (m && m.index !== undefined) {
-            return { left: line.slice(0, m.index).trim(), right: m[1] };
+            return { left: line.slice(0, m.index).trim(), right: showLengths ? m[1] : '' };
           }
           return { left: line, right: '' };
         });

@@ -102,6 +102,7 @@ export default function EditorScreen() {
   const [frameColor, setFrameColor] = useState<string>('#ffffff');
   const [columnGap, setColumnGap] = useState<string>('40');
   const [showTrackNumbers, setShowTrackNumbers] = useState<boolean>(true);
+  const [showTrackLengths, setShowTrackLengths] = useState<boolean>(true);
 
   // NOTE: we defer loading until after storage helpers are available so
   // we can prefer loading a saved project (by id) over fetching from MusicBrainz.
@@ -200,6 +201,7 @@ export default function EditorScreen() {
   albumCover,
   columnGap,
   showTrackNumbers,
+  showTrackLengths,
     ];
 
     // clear existing
@@ -215,7 +217,7 @@ export default function EditorScreen() {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [albumName, artistsName, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3, albumCover, columnGap, showTrackNumbers]);
+  }, [albumName, artistsName, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3, albumCover, columnGap, showTrackNumbers, showTrackLengths]);
 
   const fetchAlbumData = async () => {
     if (loadedFromStorageRef.current) {
@@ -462,6 +464,7 @@ export default function EditorScreen() {
       frameColor: pd.frameColor || '#ffffff',
       columnGap: pd.columnGap || '40',
       showTrackNumbers: pd.showTrackNumbers === undefined ? true : Boolean(pd.showTrackNumbers),
+      showTrackLengths: pd.showTrackLengths === undefined ? true : Boolean(pd.showTrackLengths),
     };
 
     // Clear any previous generated preview so the new generation will populate it
@@ -715,7 +718,7 @@ export default function EditorScreen() {
 
     return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [albumName, artistsName, albumCover, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3, columnGap, showTrackNumbers]);
+    }, [albumName, artistsName, albumCover, titleSize, artistsSize, tracksSize, marginTop, marginSide, marginCover, marginBackground, backgroundColor, textColor, titleRelease, releaseDate, titleRuntime, runtime, useFade, showTracklist, tracklist, color1, color2, color3, columnGap, showTrackNumbers, showTrackLengths]);
 
   const openColorPicker = (field: string) => {
     setCurrentColorField(field);
@@ -778,6 +781,7 @@ export default function EditorScreen() {
     frameColor,
     columnGap,
     showTrackNumbers,
+    showTrackLengths,
   });
 
   const posterData = getPosterDataSnapshot();
@@ -1023,7 +1027,6 @@ export default function EditorScreen() {
                   <ColorInput title="Color 3" value={color3} onClick={() => openColorPicker('color3')} />
 
                   <CheckInput title="Fade Effect" value={useFade} onChange={setUseFade} text="Enable fade effect" />
-                  <CheckInput title="Show Tracklist" value={showTracklist} onChange={setShowTracklist} text="Display tracklist" />
 
                   <CheckInput title="Framed Poster" value={framed} onChange={setFramed} text="Draw a decorative frame around the poster" />
                   {framed && (
@@ -1092,7 +1095,8 @@ export default function EditorScreen() {
                 </View>
               ) : (
                 <View style={styles.tracklistContainer}>
-                  <Text style={{ color: '#bbb', marginBottom: 8 }}>Tracklist (one per line)</Text>
+                  <CheckInput title="Show Tracklist" value={showTracklist} onChange={setShowTracklist} text="Display tracklist" />
+                  <Text style={{ color: '#bbb', marginBottom: 8, marginTop: 6 }}>Tracklist (one per line)</Text>
                   <TextInput
                     style={styles.tracklistInput}
                     value={tracklist}
@@ -1101,9 +1105,10 @@ export default function EditorScreen() {
                     placeholder="Enter tracklist..."
                     placeholderTextColor="#555"
                   />
-                  <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <CheckInput title="Show Track Numbers" value={showTrackNumbers} onChange={setShowTrackNumbers} text="Display leading track numbers (e.g. 1.)" />
-                    <View style={{ flex: 1 }}>
+                  <View style={{ marginTop: 8, flexDirection: 'column', gap: 8 }}>
+                    <CheckInput title="Show Track Numbers" value={showTrackNumbers} onChange={setShowTrackNumbers} text="Show numbers" />
+                    <CheckInput title="Show Track Lengths" value={showTrackLengths} onChange={setShowTrackLengths} text="Show durations" />
+                    <View style={{ marginTop: 6 }}>
                       <NormalInput title="Column Gap (px)" value={columnGap} onChange={setColumnGap} />
                     </View>
                   </View>
